@@ -1,36 +1,35 @@
 # jsrecon
 
-A JavaScript‑recon toolkit for authorized bug‑bounty / pentest work. Point it at
-a target's JavaScript — from a Burp export, a live crawl, web archives, or a
-plain URL list — and it downloads every `.js`, extracts endpoints, parameters
-and secrets (jsluice + trufflehog + semgrep), reconstructs source maps and
-webpack chunks, and lets you replay requests through a real browser session that
-bypasses ServicePipe anti‑bot. A web UI and an MCP server (drive it from an LLM)
-sit on top.
+Инструмент JS-разведки для авторизованного bug-bounty / пентеста. Скармливаешь ему
+JavaScript цели — из экспорта Burp, живого краула, веб-архивов или простого списка
+URL — и он скачивает каждый `.js`, вытаскивает эндпоинты, параметры и секреты
+(jsluice + trufflehog + semgrep), восстанавливает source maps и webpack-чанки, и
+даёт переигрывать запросы через реальную браузерную сессию, которая обходит
+антибот ServicePipe. Сверху — веб-интерфейс и MCP-сервер (можно управлять из LLM).
 
 ---
 
-## 1. Install
+## 1. Установка
 
-Two ways. **Docker** is self‑contained (all external tools baked in). **Local**
-needs a few Go/Python tools on your machine.
+Два способа. **Docker** — всё в одном (внешние инструменты уже внутри образа).
+**Локально** — нужно поставить несколько Go/Python-инструментов вручную.
 
-### Option A — Docker (recommended)
+### Вариант A — Docker (рекомендуется)
 
 ```bash
-git clone <your-repo-url> jsrecon && cd jsrecon
-docker compose up -d --build          # first build compiles the Go tools, takes a while
+git clone https://github.com/Mr-Zapi/jsrecon.git && cd jsrecon
+docker compose up -d --build          # первая сборка компилирует Go-инструменты, это долго
 ```
 
-The UI is now on **http://127.0.0.1:8777**. Data (users, token, saved projects,
-JS corpora) persists in the `jsrecon-data` volume.
+Интерфейс на **http://127.0.0.1:8777**. Данные (пользователи, токен, сохранённые
+проекты, JS-корпуса) хранятся в volume `jsrecon-data`.
 
-### Option B — Local (venv)
+### Вариант B — Локально (venv)
 
-Needs Python 3.11+, Go, and Chromium. Install the external tools once:
+Нужны Python 3.11+, Go и Chromium. Внешние инструменты ставятся один раз:
 
 ```bash
-# Go tools
+# Go-инструменты
 go install github.com/BishopFox/jsluice/cmd/jsluice@latest
 go install github.com/projectdiscovery/katana/cmd/katana@latest
 go install github.com/tomnomnom/gf@latest
@@ -38,173 +37,173 @@ go install github.com/tomnomnom/waybackurls@latest
 go install github.com/lc/gau/v2/cmd/gau@latest
 # trufflehog
 curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b ~/go/bin
-# gf vulnerability patterns
+# gf-паттерны для поиска уязвимостей
 git clone --depth 1 https://github.com/1ndianl33t/Gf-Patterns ~/.gf
 
-# Python env (semgrep, mitmproxy, playwright come from requirements.txt)
+# Python-окружение (semgrep, mitmproxy, playwright — из requirements.txt)
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 playwright install --with-deps chromium
 ```
 
-Tools are looked up on `PATH` / `~/go/bin`; override any with env vars
+Инструменты ищутся в `PATH` / `~/go/bin`; любой можно переопределить env-переменной
 (`JSLUICE_BIN`, `KATANA_BIN`, `GAU_BIN`, `WAYBACKURLS_BIN`, `TRUFFLEHOG_BIN`,
 `SEMGREP_BIN`).
 
 ---
 
-## 2. Run
+## 2. Запуск
 
 ```bash
 # Docker
 docker compose up -d
 
-# Local
+# Локально
 ./start.sh            # == uvicorn jsrecon.server:app --host 127.0.0.1 --port 8777
 ```
 
-Open **http://127.0.0.1:8777**.
+Открываешь **http://127.0.0.1:8777**.
 
-**First run:** registration is open only until the first account exists. Open the
-UI, create the **owner** account (login + password) — after that registration is
-closed and you just log in. No registration codes, no auth env vars.
+**Первый запуск:** регистрация открыта только пока нет ни одного аккаунта.
+Открываешь интерфейс, создаёшь аккаунт **владельца** (логин + пароль) — после этого
+регистрация закрывается и остаётся только вход. Никаких кодов и env-переменных.
 
-Print the auth state / API token any time:
+Посмотреть состояние авторизации / API-токен:
 
 ```bash
-python -m jsrecon.admin status                    # local
+python -m jsrecon.admin status                     # локально
 docker exec jsrecon python -m jsrecon.admin status # docker
 ```
 
 ---
 
-## 3. Connect the MCP server (drive jsrecon from an LLM)
+## 3. Подключение MCP-сервера (управление из LLM)
 
-The MCP server is a thin client over the running jsrecon server, so the model
-shares your live jobs, workspace and browser session. The API token is read
-automatically from `~/.jsrecon_data/token` — no token env needed for a local run.
+MCP-сервер — тонкий клиент к запущенному серверу jsrecon, поэтому модель видит те же
+живые задачи, тот же проект и ту же браузерную сессию. API-токен читается
+автоматически из `~/.jsrecon_data/token` — для локального запуска env с токеном
+не нужна.
 
 ```bash
 claude mcp add jsrecon \
-  -e PYTHONPATH=/absolute/path/to/jsrecon \
-  -- /absolute/path/to/jsrecon/.venv/bin/python -m jsrecon.mcp_server
+  -e PYTHONPATH=/абсолютный/путь/к/jsrecon \
+  -- /абсолютный/путь/к/jsrecon/.venv/bin/python -m jsrecon.mcp_server
 ```
 
-- `PYTHONPATH` must point at the repo root so the `jsrecon` package resolves.
-- Point at a non‑default server with `-e JSRECON_URL=http://127.0.0.1:8777`.
-- **Docker:** the token lives in the container volume — pass it explicitly:
+- `PYTHONPATH` должен указывать на корень репозитория, чтобы резолвился пакет `jsrecon`.
+- Другой адрес сервера — через `-e JSRECON_URL=http://127.0.0.1:8777`.
+- **Docker:** токен лежит в volume контейнера — передай его явно:
   `-e JSRECON_TOKEN="$(docker exec jsrecon cat /data/token)"`.
 
-The model can then list/search endpoints, read params/secrets/findings, send
-requests through your browser session, set auth headers, start katana/archive
-jobs, and more.
+После этого модель может листать/искать эндпоинты, читать параметры/секреты/находки,
+слать запросы через твою браузерную сессию, ставить auth-заголовки, запускать
+задачи katana/archive и т.д.
 
 ---
 
-## What it does
+## Что умеет
 
-### Sources (tabs in the UI)
+### Источники (вкладки в интерфейсе)
 
-| Tab | What it does |
-|-----|--------------|
-| **Burp XML** | Upload a Burp export (`.xml`) — streamed to the server. Extracts JS from responses + inline `<script>`, merges real observed traffic, expands source maps / webpack chunks. |
-| **Katana** | Crawl a live domain, collect `.js`, download and analyze. Can ride the browser session (ServicePipe bypass) or go through the browser‑agent proxy. |
-| **Archive** | Pull historical `.js` URLs from `gau` + `waybackurls` (incl. removed‑from‑site files), download and analyze. |
-| **Каталог** | Run jsluice + SAST over an **already‑downloaded** corpus directory — no re‑download. Used to resume after an interruption. |
-| **Список URL** | Upload a `.txt` of `.js` URLs (one per line); download and analyze them with the same pipeline. |
+| Вкладка | Что делает |
+|---------|-----------|
+| **Burp XML** | Загружаешь экспорт Burp (`.xml`) — стримится на сервер. Вытаскивает JS из ответов + inline `<script>`, подмешивает реальный наблюдённый трафик, раскрывает source maps / webpack-чанки. |
+| **Katana** | Краулит живой домен, собирает `.js`, качает и анализирует. Может ходить через браузерную сессию (обход ServicePipe) или через прокси браузер-агента. |
+| **Archive** | Тянет историчные `.js`-URL из `gau` + `waybackurls` (в т.ч. удалённые со страниц), качает и анализирует. |
+| **Каталог** | Гоняет jsluice + SAST по **уже скачанному** корпусу на диске — без повторной загрузки. Для продолжения после обрыва. |
+| **Список URL** | Загружаешь `.txt` со списком `.js`-URL (по одному в строке); качает и анализирует тем же конвейером. |
 
-Everything from every source merges into one deduplicated project.
+Всё со всех источников сливается в один дедуплицированный проект.
 
-### Analysis pipeline
+### Конвейер анализа
 
-- **Endpoints** via jsluice — method, path, query/body params, headers.
-- **Secrets** via jsluice‑secrets + trufflehog (optionally verify keys are live).
-- **SAST** via semgrep (DOM‑XSS, `eval`, `postMessage`, injection sinks…).
-- **Source maps** — inline always, remote fetched on demand (reconstructs
-  original TypeScript/JS).
-- **Webpack** — enumerates and downloads lazily‑loaded chunks.
+- **Эндпоинты** через jsluice — метод, путь, query/body-параметры, заголовки.
+- **Секреты** через jsluice-secrets + trufflehog (можно проверять живость ключей).
+- **SAST** через semgrep (DOM-XSS, `eval`, `postMessage`, инъекционные приёмники…).
+- **Source maps** — inline всегда, удалённые докачиваются по требованию
+  (восстанавливает исходный TypeScript/JS).
+- **Webpack** — перечисляет и качает лениво-подгружаемые чанки.
 
-Findings land in **Находки**; endpoints in **Проект**.
+Находки — во вкладке **Находки**, эндпоинты — во вкладке **Проект**.
 
-### Unknown‑host handling
+### Обработка неизвестного хоста
 
-A relative path in JS (`/api/v1/x`) has no host of its own — in the real SPA the
-browser resolves it against the *page* origin, not the CDN the bundle was served
-from. So jsrecon marks such endpoints **host `?`** ("❓ неизвестный хост") instead
-of guessing; only absolute / protocol‑relative URLs keep their real host.
+У относительного пути в JS (`/api/v1/x`) своего хоста нет — в реальном SPA браузер
+резолвит его относительно **origin страницы**, а не CDN, откуда подгрузился бандл.
+Поэтому jsrecon помечает такие эндпоинты **хостом `?`** («❓ неизвестный хост»), а не
+угадывает; реальный хост сохраняется только у абсолютных / протокол-относительных URL.
 
-In the **🌐 Домены** tab you see every collected host with endpoint counts and can
-**rebase** a host: click *"→ задать хост"* on `?` (or *"→ заменить хост"* on any
-host) to reassign those endpoints to the real API domain (e.g. `api.yoomoney.ru`).
-The list re‑deduplicates under the new host.
+Во вкладке **🌐 Домены** видишь все собранные хосты со счётчиками и можешь
+**перебазировать** хост: жмёшь *«→ задать хост»* на `?` (или *«→ заменить хост»* на
+любом) и переносишь эти эндпоинты на реальный API-домен (напр. `api.yoomoney.ru`).
+Список передедуплицируется под новым хостом.
 
-### Replay + ServicePipe bypass
+### Переигрывание + обход ServicePipe
 
-- **Прокси‑браузер** — launches a real Chromium through a MITM proxy (like Burp).
-  It captures live cookies and injects a JS agent that runs `fetch()` from inside
-  the ServicePipe‑passed page, so replayed requests carry the rolling anti‑bot
-  token. `--disable-web-security` lets the agent read cross‑origin responses.
-- **Domain pinning** (⚙) — for subdomains that 302 away, the agent serves a stub
-  on top‑level navigation so the tab stays on the origin you want to test.
-- **Token collection** (⚙ → 🔑) — the agent harvests `localStorage` /
-  `sessionStorage` Bearer/JWT tokens (which aren't cookies) so you can feed one to
-  `set_auth`.
-- **Agent HTTP proxy** — external tools (dirsearch, ffuf, curl, katana) can go
-  through `--proxy http://127.0.0.1:8888` to inherit the ServicePipe bypass.
+- **Прокси-браузер** — запускает реальный Chromium через MITM-прокси (как Burp).
+  Снимает живые куки и инъектит JS-агента, который делает `fetch()` изнутри
+  прошедшей ServicePipe страницы, так что переигранные запросы несут «катящийся»
+  антибот-токен. `--disable-web-security` позволяет агенту читать кросс-origin ответы.
+- **Закрепление домена** (⚙) — для сабдоменов, которые редиректят 302, агент отдаёт
+  заглушку на навигации, и вкладка остаётся на нужном origin.
+- **Сбор токенов** (⚙ → 🔑) — агент собирает Bearer/JWT из `localStorage` /
+  `sessionStorage` (это не куки), можно скормить один в `set_auth`.
+- **HTTP-прокси агента** — внешние инструменты (dirsearch, ffuf, curl, katana) могут
+  ходить через `--proxy http://127.0.0.1:8888` и наследовать обход ServicePipe.
 
-### Filtering & exports
+### Фильтры и экспорт
 
-- Filter box: `domain=*yoomoney.ru && method=GET && has_param`.
-- Exports honor the current filter: **Swagger** (OpenAPI JSON), **JSON**, **MD**.
+- Строка фильтра: `domain=*yoomoney.ru && method=GET && has_param`.
+- Экспорт учитывает текущий фильтр: **Swagger** (OpenAPI JSON), **JSON**, **MD**.
 
-### Settings (⚙)
+### Настройки (⚙)
 
-- **Upstream proxy** — routes all self‑downloading tools through an HTTP proxy
-  (empty = direct).
-- **Rate limit (`req/s`)** — global cap on requests/sec across every
-  self‑downloading tool (`0` = unlimited). Set it to be polite / avoid IP bans.
-- **Domain pins**, **agent tokens**, **save / clear project**.
+- **Upstream-прокси** — гонит все само-скачивающие инструменты через HTTP-прокси
+  (пусто = напрямую).
+- **Лимит запросов (`req/s`)** — глобальный потолок запросов/сек для всех
+  само-скачивающих инструментов (`0` = без ограничений). Ставь, чтобы не словить бан.
+- **Закрепления доменов**, **токены агента**, **сохранить / очистить проект**.
 
 ---
 
-## How data is stored (and why runs survive crashes)
+## Как хранятся данные (и почему прогоны переживают падения)
 
-Downloads stream **straight to disk**, one file at a time — nothing is held in
-RAM — split into `part-NNNN/` subdirs of 500 files each:
+Скачивание идёт **сразу на диск**, по одному файлу — в оперативке ничего не
+копится — с разбивкой на подкаталоги `part-NNNN/` по 500 файлов:
 
 ```
-~/.jsrecon_data/jscorpus/<user>/<source>-<target>/part-0000/…  (+ _manifest.json)
+~/.jsrecon_data/jscorpus/<user>/<источник>-<цель>/part-0000/…  (+ _manifest.json)
 ```
 
-Analysis then runs jsluice/semgrep **directly on those files**, one part at a
-time, so a 15k‑file corpus never blows up memory. If a run is interrupted (or you
-get IP‑banned mid‑download), the files already on disk stay — point the
-**Каталог** tab at that directory to finish the SAST without re‑downloading.
+Анализ потом гоняет jsluice/semgrep **прямо по этим файлам**, по одной партии за раз,
+так что корпус на 15k файлов не разносит память. Если прогон оборвался (или тебя
+забанило по IP посреди загрузки) — уже скачанные файлы остаются; наводишь вкладку
+**Каталог** на этот каталог и досчитываешь SAST без повторной загрузки.
 
-Persistent data lives under `JSRECON_DATA` (default `~/.jsrecon_data`, `/data` in
-Docker): `users.json`, `token`, `projects/<user>.json`, and `jscorpus/`.
-
----
-
-## Environment variables
-
-| Var | Default | Purpose |
-|-----|---------|---------|
-| `JSRECON_DATA` | `~/.jsrecon_data` | persistent data dir |
-| `JSRECON_WORKDIR` | `~/project` | legacy default folder for server‑side Burp XML |
-| `JSRECON_TOKEN` | auto (`$DATA/token`) | API/bearer token; auto‑generated & persisted |
-| `JSRECON_MCP_USER` | owner account | principal the bearer/MCP acts as |
-| `JSRECON_MAX_RPS` | `0` | default global download rate limit |
-| `JSRECON_CORPUS_BATCH` | `500` | files per part‑subdir |
-| `JSRECON_AGENT_PROXY_PORT` | `8888` | port for the external‑tool agent proxy |
-| `JSRECON_SEMGREP_BATCH` / `_MAXMEM_MB` / `_MAX_FILE_KB` | `300` / `2000` / `2000` | semgrep memory guards |
-| `JSLUICE_BIN`, `KATANA_BIN`, `GAU_BIN`, `WAYBACKURLS_BIN`, `TRUFFLEHOG_BIN`, `SEMGREP_BIN` | on PATH | external tool overrides |
+Постоянные данные лежат под `JSRECON_DATA` (по умолчанию `~/.jsrecon_data`, в Docker
+`/data`): `users.json`, `token`, `projects/<user>.json` и `jscorpus/`.
 
 ---
 
-## Security notes
+## Переменные окружения
 
-- Bind to localhost only. For remote use, put nginx + TLS in front — the app has
-  no transport security of its own.
-- The proxy‑browser runs with `--disable-web-security`; use it only for testing.
-- Only use against targets you are authorized to test.
+| Переменная | По умолчанию | Назначение |
+|-----------|--------------|-----------|
+| `JSRECON_DATA` | `~/.jsrecon_data` | каталог постоянных данных |
+| `JSRECON_WORKDIR` | `~/project` | легаси-каталог для серверного Burp XML |
+| `JSRECON_TOKEN` | авто (`$DATA/token`) | API/bearer-токен; генерируется и сохраняется сам |
+| `JSRECON_MCP_USER` | аккаунт владельца | под кем действует bearer/MCP |
+| `JSRECON_MAX_RPS` | `0` | глобальный лимит запросов/сек по умолчанию |
+| `JSRECON_CORPUS_BATCH` | `500` | файлов на подкаталог part |
+| `JSRECON_AGENT_PROXY_PORT` | `8888` | порт прокси агента для внешних инструментов |
+| `JSRECON_SEMGREP_BATCH` / `_MAXMEM_MB` / `_MAX_FILE_KB` | `300` / `2000` / `2000` | лимиты памяти semgrep |
+| `JSLUICE_BIN`, `KATANA_BIN`, `GAU_BIN`, `WAYBACKURLS_BIN`, `TRUFFLEHOG_BIN`, `SEMGREP_BIN` | из PATH | пути к внешним инструментам |
+
+---
+
+## Безопасность
+
+- Слушай только localhost. Для удалённого доступа ставь спереди nginx + TLS — своей
+  транспортной защиты у приложения нет.
+- Прокси-браузер запускается с `--disable-web-security`; используй только для тестов.
+- Применяй только против целей, которые тебе разрешено тестировать.
