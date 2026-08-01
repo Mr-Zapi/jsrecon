@@ -1,0 +1,24 @@
+services:
+  jsrecon:
+    build: .
+    image: jsrecon:latest
+    container_name: jsrecon
+    # Publish ONLY to localhost — put nginx + SSL in front on the host.
+    ports:
+      - "127.0.0.1:8777:8777"
+    environment:
+      # No auth env needed: the API token auto-generates and persists to
+      # /data/token, and the MCP/bearer principal acts as the owner account.
+      # Optional tuning (uncomment to use):
+      # JSRECON_MAX_RPS: "5"          # global download rate limit (0 = unlimited)
+      # JSRECON_CORPUS_BATCH: "500"   # files per part-subdir during analysis
+      JSRECON_MAX_RPS: "${JSRECON_MAX_RPS:-0}"
+    volumes:
+      - jsrecon-data:/data        # users, token, saved projects, JS corpora (persistent)
+      - ./burps:/work             # optional: host folder for Burp XML exports
+    restart: unless-stopped
+    # chromium in a container benefits from a bit more shared memory
+    shm_size: "1gb"
+
+volumes:
+  jsrecon-data:

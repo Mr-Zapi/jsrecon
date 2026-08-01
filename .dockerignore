@@ -1,0 +1,12 @@
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+.git
+.jsrecon_data
+new_burp.xml
+*.xml
+/tmp
+report.json
+report.md
+*.output

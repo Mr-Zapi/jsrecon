@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>jsrecon</title>
+  <link rel="stylesheet" href="/static/style.css?v=7">
+</head>
+<body>
+  <header>
+    <div class="row1">
+      <h1>js<span>recon</span></h1>
+      <div class="srcTabs">
+        <button class="srcTab active" data-src="burp">Burp XML</button>
+        <button class="srcTab" data-src="katana">Katana</button>
+        <button class="srcTab" data-src="archive">Archive</button>
+        <button class="srcTab" data-src="dir">Каталог</button>
+        <button class="srcTab" data-src="urls">Список URL</button>
+      </div>
+      <div class="session">
+        <button id="proxyBrowserBtn" class="primary" title="как Burp: обычный браузер через MITM-прокси, снимает живые куки и инъектит агента (обход ServicePipe)">Прокси-браузер</button>
+        <button id="sessStopBtn" title="остановить прокси-браузер">✕</button>
+        <span id="sessStatus" class="sessStatus">прокси: нет</span>
+        <span id="agentProxyStatus" class="agentProxyStatus" hidden title="HTTP-прокси для внешних инструментов (dirsearch, ffuf, katana)"></span>
+        <span class="sessSpacer"></span>
+        <div class="gearWrap">
+          <button id="gearBtn" class="gearBtn" title="настройки">⚙</button>
+          <div id="gearMenu" class="gearMenu" hidden>
+            <div class="gearUser">👤 <b id="userLabel"></b></div>
+            <button id="saveBtn" title="перезатрёт старый проект">💾 Сохранить проект</button>
+            <button id="clearBtn" title="очистить текущий проект (эндпоинты/находки)">🗑 Очистить проект</button>
+            <div class="gearRow">
+              <input id="proxyInput" class="proxyInput" placeholder="http://127.0.0.1:12334">
+              <button id="proxyBtn" title="применить upstream-прокси">прокси</button>
+            </div>
+            <div class="gearRow">
+              <input id="rateInput" class="proxyInput" type="number" min="0" step="1" placeholder="лимит запросов/сек (0 = без лимита)">
+              <button id="rateBtn" title="макс. запросов/сек для всех само-скачивающих инструментов (katana, archive, список URL, webpack)">req/s</button>
+            </div>
+            <div class="gearRow">
+              <input id="pinInput" class="proxyInput" placeholder="закрепить агент: sub.kuper.ru">
+              <button id="pinBtn" title="редирект с этого хоста заменяется заглушкой с агентом (вкладка остаётся на origin)">📌 закрепить</button>
+            </div>
+            <div id="pinList" class="pinList"></div>
+            <button id="tokBtn" title="токены из localStorage/sessionStorage, собранные агентом">🔑 Токены агента</button>
+            <div id="tokBox" class="pinList"></div>
+            <button id="logoutBtn" title="выход">⎋ Выход</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="srcPane" id="src-burp">
+      <div class="row1">
+        <input type="file" id="xmlFile" accept=".xml,text/xml,application/xml" class="urlsFile" title="выбрать Burp XML с диска (загрузится на сервер)">
+        <span id="xmlName" class="katHint" style="margin:0"></span>
+        <label title="inline <script> из HTML">inline<input type="checkbox" id="inlineChk" checked></label>
+        <label title="реальные запросы из трафика Burp">traffic<input type="checkbox" id="trafficChk" checked></label>
+        <label title="секреты: jsluice + trufflehog">secrets<input type="checkbox" id="secretsChk" checked></label>
+        <label title="semgrep SAST (DOM-XSS, eval, postMessage…)">semgrep<input type="checkbox" id="semgrepChk" checked></label>
+        <label title="trufflehog: проверять, что ключ живой (сеть)">verify<input type="checkbox" id="verifyChk"></label>
+        <label title="восстанавливать код из .map">maps<input type="checkbox" id="mapsChk" checked></label>
+        <label title="докачивать удалённые .map по сети">fetch-maps<input type="checkbox" id="fetchMapsChk"></label>
+        <label title="перечислить и скачать webpack-чанки (сеть)">webpack<input type="checkbox" id="webpackChk"></label>
+        <label title="jsluice -I">-I<input type="checkbox" id="ignoreChk"></label>
+        <button id="analyzeBtn" class="primary">Анализировать</button>
+      </div>
+    </div>
+
+    <div class="srcPane" id="src-katana" hidden>
+      <div class="row1">
+        <input id="katDomain" class="katDomain" placeholder="домен для katana, напр. kuper.ru">
+        <label title="глубина краула">depth<input type="number" id="katDepth" value="2" min="1" max="6" class="katDepth"></label>
+        <label title="headless-браузер (JS-рендер)">headless<input type="checkbox" id="katHeadless"></label>
+        <label title="куки/сессию для обхода servicepipe">session<input type="checkbox" id="katSession" checked></label>
+        <label title="секреты: jsluice + trufflehog">secrets<input type="checkbox" id="katSecrets" checked></label>
+        <label title="semgrep SAST">semgrep<input type="checkbox" id="katSemgrep" checked></label>
+        <label title="trufflehog: проверять живость (сеть)">verify<input type="checkbox" id="katVerify"></label>
+        <label title="восстанавливать код из .map (фетч через сессию)">maps<input type="checkbox" id="katMaps" checked></label>
+        <label title="перечислить и скачать webpack-чанки">webpack<input type="checkbox" id="katWebpack" checked></label>
+        <label title="пустить katana через браузер-агент (обход ServicePipe)">via agent<input type="checkbox" id="katAgent"></label>
+        <button id="katBtn" class="primary">🕷 Собрать JS и анализировать</button>
+        <button id="katStopBtn" hidden>⏹ Стоп</button>
+      </div>
+      <div class="katHint">katana обойдёт домен, найдёт .js, скачает (через сессию, если включено) и прогонит тот же анализ. Для servicepipe сперва открой сессию и залогинься.</div>
+    </div>
+
+    <div class="srcPane" id="src-archive" hidden>
+      <div class="row1">
+        <input id="arcDomain" class="katDomain" placeholder="домен для архивов, напр. kuper.ru">
+        <label title="waybackurls">wayback<input type="checkbox" id="arcWayback" checked></label>
+        <label title="gau (wayback/commoncrawl/otx/urlscan)">gau<input type="checkbox" id="arcGau" checked></label>
+        <label title="включая поддомены">subs<input type="checkbox" id="arcSubs" checked></label>
+        <label title="скачивать через браузер-сессию">session<input type="checkbox" id="arcSession" checked></label>
+        <label title="semgrep SAST">semgrep<input type="checkbox" id="arcSemgrep" checked></label>
+        <label title="webpack-чанки">webpack<input type="checkbox" id="arcWebpack" checked></label>
+        <label title="source maps">maps<input type="checkbox" id="arcMaps" checked></label>
+        <button id="arcBtn" class="primary">📚 Собрать JS из архивов</button>
+        <button id="arcStopBtn" hidden>⏹ Стоп</button>
+      </div>
+      <div class="katHint">gau + waybackurls вытащат историчные .js-URL (в т.ч. удалённые со страниц), скачают и прогонят тот же анализ. Всё сливается в общий проект.</div>
+    </div>
+
+    <div class="srcPane" id="src-dir" hidden>
+      <div class="row1">
+        <input id="dirScanPath" class="pathInput" placeholder="путь к каталогу с .js на сервере, напр. ~/.jsrecon_data/jscorpus/zapi/archive-yoomoney.ru">
+        <label title="секреты: jsluice + trufflehog">secrets<input type="checkbox" id="dirSecrets" checked></label>
+        <label title="semgrep SAST">semgrep<input type="checkbox" id="dirSemgrep" checked></label>
+        <label title="trufflehog: проверять живость (сеть)">verify<input type="checkbox" id="dirVerify"></label>
+        <button id="dirBtn" class="primary">🗂 SAST по каталогу</button>
+        <button id="dirStopBtn" hidden>⏹ Стоп</button>
+      </div>
+      <div class="katHint">Прогонит jsluice + SAST по уже скачанным .js БЕЗ повторной загрузки — для resume после вылета. Каждая загрузка через Katana/Archive автоматически сохраняет корпус в <code>~/.jsrecon_data/jscorpus/&lt;user&gt;/&lt;source&gt;-&lt;домен&gt;/</code> (путь пишется в лог как «corpus saved to …»). Скорми этот путь сюда.</div>
+    </div>
+
+    <div class="srcPane" id="src-urls" hidden>
+      <div class="row1">
+        <input type="file" id="urlsFile" accept=".txt,text/plain" class="urlsFile">
+        <span id="urlsCount" class="katHint" style="margin:0"></span>
+        <label title="скачивать через браузер-сессию (обход ServicePipe)">session<input type="checkbox" id="urlsSession" checked></label>
+        <label title="секреты: jsluice + trufflehog">secrets<input type="checkbox" id="urlsSecrets" checked></label>
+        <label title="semgrep SAST">semgrep<input type="checkbox" id="urlsSemgrep" checked></label>
+        <label title="trufflehog: проверять живость (сеть)">verify<input type="checkbox" id="urlsVerify"></label>
+        <label title="webpack-чанки">webpack<input type="checkbox" id="urlsWebpack" checked></label>
+        <label title="source maps">maps<input type="checkbox" id="urlsMaps" checked></label>
+        <button id="urlsBtn" class="primary">📄 Скачать и анализировать</button>
+        <button id="urlsStopBtn" hidden>⏹ Стоп</button>
+      </div>
+      <div class="katHint">Загрузи .txt со списком .js-URL (по одному в строке). Скачает их (через сессию, если включено) и прогонит тот же анализ — webpack, source maps, jsluice, SAST. Результат сливается в общий проект.</div>
+    </div>
+
+    <div id="status" class="status"></div>
+  </header>
+
+  <main>
+    <section id="listPane">
+      <div class="tabs">
+        <button class="tab active" data-tab="eps">Проект (объединённое) <span id="epCount"></span></button>
+        <button class="tab" data-tab="domains">🌐 Домены <span id="domCount"></span></button>
+        <button class="tab" id="findTab" data-tab="find" hidden>Находки <span id="findCount"></span></button>
+        <button class="tab" data-tab="log">📋 Лог</button>
+      </div>
+
+      <div class="tabBody" id="tab-eps">
+        <div class="listHead">
+          <input id="filterInput" placeholder="фильтр: domain=*kuper.ru && method=GET && has_param">
+          <button id="applyFilter" title="применить">▶</button>
+        </div>
+        <div class="listHead sub">
+          <label><input type="checkbox" id="staticChk"> показывать статику</label>
+          <span class="spacer"></span>
+          <a id="swaggerLink" class="dl" target="_blank" title="Swagger по текущему фильтру">⤓ Swagger</a>
+          <a id="jsonLink" class="dl" target="_blank">JSON</a>
+          <a id="mdLink" class="dl" target="_blank">MD</a>
+        </div>
+        <ul id="epList"></ul>
+      </div>
+
+      <div class="tabBody" id="tab-domains" hidden>
+        <div class="listHead sub"><span id="domHint" class="katHint" style="margin:0">все собранные домены (клик — фильтр по домену)</span></div>
+        <ul id="domList"></ul>
+      </div>
+
+      <div class="tabBody" id="tab-find" hidden>
+        <ul id="findList"></ul>
+      </div>
+
+      <div class="tabBody" id="tab-log" hidden><pre id="logBox"></pre></div>
+    </section>
+
+    <section id="detailPane">
+      <div id="detailEmpty" class="empty">← выбери запрос</div>
+      <div id="detail" hidden>
+        <div class="epMeta" id="epMeta"></div>
+        <div class="grid">
+          <div class="col">
+            <div class="colHead">HTTP запрос
+              <span>
+                <label class="mini" title="слать через сессию браузера">sess<input type="checkbox" id="useSessChk" checked></label>
+                <button id="editBtn" class="mini">✎ править</button>
+              </span>
+            </div>
+            <textarea id="reqBox" spellcheck="false" readonly></textarea>
+            <div class="sendRow">
+              <input id="cookieInput" placeholder="Cookie: (если без сессии)…">
+              <button id="sendBtn" class="primary">▶ Отправить</button>
+            </div>
+          </div>
+          <div class="col">
+            <div class="colHead">Ответ <span id="respMeta"></span></div>
+            <textarea id="respBox" spellcheck="false" readonly placeholder="ответ здесь"></textarea>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js?v=7"></script>
+</body>
+</html>

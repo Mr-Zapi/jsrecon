@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# local data / runtime artifacts
+.jsrecon_data/
+burps/
+*.log

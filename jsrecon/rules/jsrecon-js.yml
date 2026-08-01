@@ -1,0 +1,81 @@
+# Curated, offline JS client-side security rules for jsrecon.
+# High-signal sinks for manual review — heuristic, may have false positives.
+rules:
+  - id: dom-innerhtml-sink
+    languages: [javascript]
+    severity: WARNING
+    message: "Assignment to innerHTML/outerHTML — potential DOM XSS sink"
+    patterns:
+      - pattern-either:
+          - pattern: $X.innerHTML = $Y
+          - pattern: $X.outerHTML = $Y
+      - pattern-not: $X.innerHTML = "..."
+      - pattern-not: $X.outerHTML = "..."
+
+  - id: dom-document-write
+    languages: [javascript]
+    severity: WARNING
+    message: "document.write()/writeln() — potential DOM XSS sink"
+    pattern-either:
+      - pattern: document.write(...)
+      - pattern: document.writeln(...)
+
+  - id: dom-insert-adjacent-html
+    languages: [javascript]
+    severity: WARNING
+    message: "insertAdjacentHTML — potential DOM XSS sink"
+    pattern: $X.insertAdjacentHTML(...)
+
+  - id: jquery-html-sink
+    languages: [javascript]
+    severity: WARNING
+    message: "jQuery .html($X) with dynamic content — potential DOM XSS"
+    patterns:
+      - pattern: $X.html($Y)
+      - pattern-not: $X.html("...")
+      - pattern-not: $X.html()
+
+  - id: js-eval
+    languages: [javascript]
+    severity: ERROR
+    message: "eval() — dynamic code execution sink"
+    patterns:
+      - pattern: eval($X)
+      - pattern-not: eval("...")
+
+  - id: js-function-constructor
+    languages: [javascript]
+    severity: WARNING
+    message: "Function() constructor — dynamic code execution"
+    pattern: new Function(...)
+
+  - id: js-settimeout-string
+    languages: [javascript]
+    severity: WARNING
+    message: "setTimeout/setInterval with a string argument — code execution"
+    pattern-either:
+      - pattern: setTimeout($S, ...)
+      - pattern: setInterval($S, ...)
+    metavariable-pattern:
+      metavariable: $S
+      patterns:
+        - pattern-not: $F
+        - pattern: "..."
+
+  - id: postmessage-listener-check-origin
+    languages: [javascript]
+    severity: WARNING
+    message: "message event listener — verify event.origin to avoid cross-origin abuse"
+    pattern: window.addEventListener("message", ...)
+
+  - id: location-assignment
+    languages: [javascript]
+    severity: INFO
+    message: "location assignment — open redirect / DOM XSS if value is tainted"
+    patterns:
+      - pattern-either:
+          - pattern: location.href = $X
+          - pattern: window.location = $X
+          - pattern: location.replace($X)
+      - pattern-not: location.href = "..."
+      - pattern-not: window.location = "..."

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>jsrecon — вход</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="loginBody">
+  <div class="loginCard">
+    <h1>js<span>recon</span></h1>
+
+    <div class="loginTabs">
+      <button class="lt active" data-lt="login">Вход</button>
+      <button class="lt" data-lt="reg">Регистрация</button>
+    </div>
+
+    <form id="loginForm" class="lform">
+      <input type="text" id="lUser" placeholder="логин" autocomplete="username">
+      <input type="password" id="lPw" placeholder="пароль" autocomplete="current-password">
+      <button type="submit" class="primary">Войти</button>
+    </form>
+
+    <form id="regForm" class="lform" hidden>
+      <input type="text" id="rUser" placeholder="логин (3-32: a-z 0-9 _ -)" autocomplete="username">
+      <input type="password" id="rPw" placeholder="пароль (мин. 6)" autocomplete="new-password">
+      <button type="submit" class="primary">Создать аккаунт владельца</button>
+    </form>
+
+    <div id="loginErr" class="loginErr"></div>
+  </div>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    // registration is only open until the owner account exists
+    fetch("/api/setup-state").then(r => r.json()).then(s => {
+      const regTab = document.querySelector('.lt[data-lt="reg"]');
+      if (!s.registration_open) {
+        // only login is possible: hide the whole tab bar (no choice to make)
+        document.querySelector('.loginTabs').hidden = true;
+      } else {
+        // no accounts yet: default to the registration tab
+        regTab.click();
+      }
+    }).catch(()=>{});
+    document.querySelectorAll(".lt").forEach(t => t.onclick = () => {
+      document.querySelectorAll(".lt").forEach(x => x.classList.remove("active"));
+      t.classList.add("active");
+      $("loginForm").hidden = t.dataset.lt !== "login";
+      $("regForm").hidden = t.dataset.lt !== "reg";
+      $("loginErr").textContent = "";
+    });
+    $("loginForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const r = await fetch("/api/login", { method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ username: $("lUser").value, password: $("lPw").value }) });
+      if (r.ok) location.href = "/";
+      else $("loginErr").textContent = "неверный логин или пароль";
+    };
+    $("regForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const r = await fetch("/api/register", { method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ username: $("rUser").value, password: $("rPw").value }) });
+      const d = await r.json().catch(()=>({}));
+      if (r.ok) { $("loginErr").style.color="var(--get)"; $("loginErr").textContent = "готово! теперь войди"; }
+      else $("loginErr").textContent = d.detail || "ошибка регистрации";
+    };
+  </script>
+</body>
+</html>

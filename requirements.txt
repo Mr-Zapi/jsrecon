@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+lxml
+playwright
+python-multipart
+jinja2
+mcp
+httpx
+semgrep
+mitmproxy

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "jsrecon": {
+      "command": "/home/zapi/project/.venv/bin/python",
+      "args": ["-m", "jsrecon.mcp_server"],
+      "env": {
+        "JSRECON_URL": "http://127.0.0.1:8777",
+        "JSRECON_TOKEN": "2ee7fee2b3561bf4bc497ac5e7a65a0fb771344735f1742a"
+      }
+    }
+  }
+}
