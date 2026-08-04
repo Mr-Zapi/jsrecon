@@ -21,8 +21,8 @@ STATIC_EXT = {
     # styles / maps / docs
     "css", "scss", "less", "map", "pdf", "doc", "docx", "xls", "xlsx", "ppt",
     "pptx", "apk", "ipa", "dmg", "exe", "zip", "gz", "rar", "7z", "tar",
-    # client-side assets — a .js/.json URL is a file, not a server-side endpoint
-    "js", "mjs", "json", "wasm",
+    # client-side assets — a .js/.ts/.json URL is a file, not a server-side endpoint
+    "js", "mjs", "json", "wasm", "ts", "tsx", "jsx",
 }
 
 # path markers that strongly suggest an API endpoint

@@ -137,3 +137,4 @@ textarea[readonly]{color:#c0c0c0}
 #domList{list-style:none;margin:0;padding:0;overflow-y:auto;flex:1;min-height:0}
 .domLeft{display:flex;flex-direction:column;cursor:pointer;flex:1;min-width:0}
 .domRehost{white-space:nowrap;margin-left:8px}
+.valNum{width:80px;font-family:monospace;font-size:12px}

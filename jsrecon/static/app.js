@@ -159,6 +159,52 @@ async function stopScanUrls() {
   $("status").textContent = "скан списка остановлен";
 }
 
+// ------------------------------ host validator ------------------------------
+let VALJOB = null, VAL_SCOPE = [];
+function parseValFile() {
+  const f = $("valFile").files[0];
+  if (!f) { VAL_SCOPE = []; $("valCount").textContent = ""; return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    VAL_SCOPE = reader.result.split(/\r?\n/).map(s => s.trim())
+      .filter(s => s && !s.startsWith("#"));
+    $("valCount").textContent = `${VAL_SCOPE.length} доменов`;
+  };
+  reader.readAsText(f);
+}
+async function startValidate() {
+  if (!VAL_SCOPE.length) { alert("выбери .txt со скоупом (по домену в строке)"); return; }
+  $("valBtn").disabled = true; $("valStopBtn").hidden = false; activateTab("log");
+  const minv = $("valMin").value.trim(), maxv = $("valMax").value.trim();
+  const r = await fetch("/api/validate", { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ scope: VAL_SCOPE, from_host: $("valFrom").value.trim(),
+      statuses: $("valStatus").value.trim() || "0", reject_statuses: $("valReject").value.trim() || "0",
+      min_size: minv === "" ? null : parseInt(minv), max_size: maxv === "" ? null : parseInt(maxv),
+      cookies: $("valCookies").value.trim(), only_unknown: $("valUnknown").checked,
+      skip_static: $("valSkipStatic").checked }) });
+  if (!r.ok) { $("valBtn").disabled=false; $("valStopBtn").hidden=true;
+    $("status").textContent = "ОШИБКА: " + (await r.text()); return; }
+  const d = await r.json(); VALJOB = d.job;
+  pollJob(VALJOB, () => { $("valBtn").disabled=false; $("valStopBtn").hidden=true; });
+}
+async function stopValidate() {
+  if (!VALJOB) return;
+  await fetch(`/api/jobs/${VALJOB}/stop`, { method:"POST" });
+  $("status").textContent = "валидатор остановлен";
+}
+
+// ------------------------------ analyze static .js/.ts ------------------------------
+let STATICJOB = null;
+async function analyzeStatic() {
+  if (!confirm("Скачать и проанализировать статические .js/.ts, затем УБРАТЬ всю статику из проекта?")) return;
+  $("staticBtn").disabled = true; activateTab("log");
+  const r = await fetch("/api/analyze-static", { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ use_session:true, do_secrets:true, do_semgrep:false, drop_after:true }) });
+  if (!r.ok) { $("staticBtn").disabled=false; $("status").textContent = "ОШИБКА: " + (await r.text()); return; }
+  const d = await r.json(); STATICJOB = d.job;
+  pollJob(STATICJOB, () => { $("staticBtn").disabled=false; });
+}
+
 async function stopArchive() {
   if (!ARCJOB) return;
   await fetch(`/api/jobs/${ARCJOB}/stop`, { method:"POST" });
@@ -536,6 +582,10 @@ $("dirStopBtn").onclick = stopScanDir;
 $("urlsBtn").onclick = startScanUrls;
 $("urlsStopBtn").onclick = stopScanUrls;
 $("urlsFile").onchange = parseUrlsFile;
+$("valBtn").onclick = startValidate;
+$("valStopBtn").onclick = stopValidate;
+$("valFile").onchange = parseValFile;
+$("staticBtn").onclick = analyzeStatic;
 $("xmlFile").onchange = () => {
   const f = $("xmlFile").files[0];
   $("xmlName").textContent = f ? `${f.name} (${(f.size/1048576).toFixed(1)} МБ)` : "";

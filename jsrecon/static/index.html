@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>jsrecon</title>
-  <link rel="stylesheet" href="/static/style.css?v=7">
+  <link rel="stylesheet" href="/static/style.css?v=12">
 </head>
 <body>
   <header>
@@ -16,6 +16,7 @@
         <button class="srcTab" data-src="archive">Archive</button>
         <button class="srcTab" data-src="dir">Каталог</button>
         <button class="srcTab" data-src="urls">Список URL</button>
+        <button class="srcTab" data-src="validate">Валидатор</button>
       </div>
       <div class="session">
         <button id="proxyBrowserBtn" class="primary" title="как Burp: обычный браузер через MITM-прокси, снимает живые куки и инъектит агента (обход ServicePipe)">Прокси-браузер</button>
@@ -129,6 +130,26 @@
       <div class="katHint">Загрузи .txt со списком .js-URL (по одному в строке). Скачает их (через сессию, если включено) и прогонит тот же анализ — webpack, source maps, jsluice, SAST. Результат сливается в общий проект.</div>
     </div>
 
+    <div class="srcPane" id="src-validate" hidden>
+      <div class="row1">
+        <input type="file" id="valFile" accept=".txt,text/plain" class="urlsFile" title="скоуп: по одному домену в строке">
+        <span id="valCount" class="katHint" style="margin:0"></span>
+        <input id="valFrom" class="katDomain" style="width:210px" placeholder="хост-источник (пусто = только ?)">
+        <label title="ACCEPT: какие коды считать попаданием (через запятую; 0 = игнорировать)">статус<input id="valStatus" class="valNum" value="200" style="width:90px"></label>
+        <label title="REJECT: какие коды считать 'нет эндпоинта', напр. 404 (через запятую; 0 = игнорировать)">ложный<input id="valReject" class="valNum" value="0" style="width:90px"></label>
+        <label title="мин. размер ответа, байт (пусто = не важно)">размер от<input id="valMin" type="number" min="0" class="valNum"></label>
+        <label title="макс. размер ответа, байт (пусто = не важно)">до<input id="valMax" type="number" min="0" class="valNum"></label>
+        <label title="только эндпоинты с неизвестным хостом (?)">только ?<input type="checkbox" id="valUnknown" checked></label>
+        <label title="не проверять статику (картинки/css/js) — резко меньше запросов">пропускать статику<input type="checkbox" id="valSkipStatic" checked></label>
+        <button id="valBtn" class="primary">✅ Проверить хосты</button>
+        <button id="valStopBtn" hidden>⏹ Стоп</button>
+      </div>
+      <div class="row1">
+        <input id="valCookies" class="pathInput" style="width:100%" placeholder="Cookie: (опционально, для эндпоинтов с авторизацией)…">
+      </div>
+      <div class="katHint">Берёт эндпоинты с хостом <b>?</b> (или с хостом из поля «хост-источник», напр. <code>static.yoomoney.ru</code>) и шлёт запрос по каждому домену из скоупа. Если ответ проходит фильтр (статус/размер) — прописывает найденный домен, иначе не трогает. Учитывает лимит запросов/сек (⚙) и идёт через агент/сессию, если открыты.</div>
+    </div>
+
     <div id="status" class="status"></div>
   </header>
 
@@ -136,9 +157,9 @@
     <section id="listPane">
       <div class="tabs">
         <button class="tab active" data-tab="eps">Проект (объединённое) <span id="epCount"></span></button>
-        <button class="tab" data-tab="domains">🌐 Домены <span id="domCount"></span></button>
+        <button class="tab" data-tab="domains">Домены <span id="domCount"></span></button>
         <button class="tab" id="findTab" data-tab="find" hidden>Находки <span id="findCount"></span></button>
-        <button class="tab" data-tab="log">📋 Лог</button>
+        <button class="tab" data-tab="log">Лог</button>
       </div>
 
       <div class="tabBody" id="tab-eps">
@@ -148,6 +169,7 @@
         </div>
         <div class="listHead sub">
           <label><input type="checkbox" id="staticChk"> показывать статику</label>
+          <button id="staticBtn" class="mini" title="скачать и проанализировать статические .js/.ts, потом убрать всю статику из проекта">🧹 Статика .js/.ts → анализ</button>
           <span class="spacer"></span>
           <a id="swaggerLink" class="dl" target="_blank" title="Swagger по текущему фильтру">⤓ Swagger</a>
           <a id="jsonLink" class="dl" target="_blank">JSON</a>
@@ -195,6 +217,6 @@
     </section>
   </main>
 
-  <script src="/static/app.js?v=7"></script>
+  <script src="/static/app.js?v=12"></script>
 </body>
 </html>

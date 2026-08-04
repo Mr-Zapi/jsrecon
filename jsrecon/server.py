@@ -134,6 +134,34 @@ class Workspace:
             self._cache = None
             return n
 
+    def static_js_urls(self) -> list[str]:
+        """Absolute .js/.ts/.mjs URLs among the static endpoints (real host only)
+        that are worth downloading + analyzing for a second wave of endpoints."""
+        out, seen = [], set()
+        for e in self.endpoints():
+            if not e.is_static or e.host == analyzer.UNKNOWN_HOST:
+                continue
+            u = e.url.split("#")[0]
+            low = u.split("?")[0].lower()
+            if low.endswith((".js", ".mjs", ".ts")) and u not in seen and u.startswith("http"):
+                seen.add(u)
+                out.append(u)
+        return out
+
+    def drop_static(self) -> int:
+        """Remove every static endpoint from the project. Returns count removed."""
+        self.endpoints()   # ensure classification is populated
+        with self._lock:
+            all_eps = self.agg.endpoints()
+            keep = [e for e in all_eps if not e.is_static]
+            new = Aggregator()
+            for e in keep:
+                new.add(e)
+            removed = len(all_eps) - len(keep)
+            self.agg = new
+            self._cache = None
+            return removed
+
     def clear(self):
         with self._lock:
             self.agg = Aggregator()
@@ -650,6 +678,191 @@ async def start_scanurls(req: ScanUrlsReq, user: str = Depends(current_user)):
     job = Job(id=uuid.uuid4().hex, path=f"{len(urls)} urls", owner=user, source="urllist")
     JOBS[job.id] = job
     asyncio.create_task(_run_scanurls_job(job, req))
+    return {"job": job.id}
+
+
+# --------------------- analyze static .js/.ts, then declutter ---------------------
+
+class StaticReq(BaseModel):
+    use_session: bool = True
+    do_secrets: bool = True
+    do_semgrep: bool = False
+    verify_secrets: bool = False
+    sourcemaps: bool = True
+    webpack: bool = True
+    drop_after: bool = True     # remove all static endpoints once analyzed
+
+
+async def _run_static_job(job: Job, req: StaticReq, user: str):
+    try:
+        job.status = "running"
+        ws = _ws(user)
+        urls = ws.static_js_urls()
+        if not urls:
+            job.note("static", "no static .js/.ts endpoints to analyze")
+        else:
+
+            def prog(stage, n):
+                job.note(stage, f"{stage}: {n}")
+
+            job.note("static", f"{len(urls)} static .js/.ts endpoints -> download & analyze")
+            await _analyze_js_urls(job, urls, req, prog, source="static")
+            _ws(job.owner).merge_job(job)
+        if req.drop_after and not job.cancelled:
+            removed = ws.drop_static()
+            job.note("declutter", f"removed {removed} static endpoints from project")
+        job.status = "done" if not job.cancelled else "error"
+        if job.cancelled and not job.error:
+            job.error = "stopped by user"
+    except Exception as e:  # noqa: BLE001
+        job.status = "error"
+        job.error = "stopped by user" if job.cancelled else repr(e)
+        job.note("error", job.error)
+    finally:
+        job.finished = time.time()
+
+
+@app.post("/api/analyze-static")
+async def start_analyze_static(req: StaticReq, user: str = Depends(current_user)):
+    job = Job(id=uuid.uuid4().hex, path="static .js/.ts", owner=user, source="static")
+    JOBS[job.id] = job
+    asyncio.create_task(_run_static_job(job, req, user))
+    return {"job": job.id}
+
+
+# --------------------------- host validator ---------------------------
+# For endpoints with an unknown host ("?"), probe each scope domain and, when a
+# response matches the filter (status / size), rebase the endpoint to that host.
+
+class ValidateReq(BaseModel):
+    scope: list[str]                     # candidate domains, one per line
+    from_host: str = ""                  # validate endpoints of THIS host (e.g. static.x.ru); empty -> use only_unknown
+    statuses: str = "200"                # ACCEPT: status must be one of these (0/empty = ignore)
+    reject_statuses: str = "0"           # REJECT: status must NOT be one of these, e.g. 404 (0/empty = ignore)
+    min_size: Optional[int] = None       # response body size window (bytes)
+    max_size: Optional[int] = None
+    cookies: str = ""                    # optional Cookie header for auth-gated eps
+    only_unknown: bool = True            # only endpoints whose host == "?"
+    skip_static: bool = True             # don't probe static assets (images/css/js)
+    scheme: str = "https"
+
+
+def _apply_hosts(ws: "Workspace", mapping: dict) -> int:
+    """mapping: {(method, host, path): new_host} -> rebase + re-dedup."""
+    with ws._lock:
+        eps = ws.agg.endpoints()
+        n = 0
+        for ep in eps:
+            nh = mapping.get((ep.method, ep.host, ep.path))
+            if nh:
+                ep.host = nh
+                ep.url = f"{ep.scheme or 'https'}://{nh}{ep.path}"
+                n += 1
+        new = Aggregator()
+        for ep in eps:
+            new.add(ep)
+        ws.agg = new
+        ws._cache = None
+    return n
+
+
+async def _run_validator_job(job: Job, req: ValidateReq, user: str):
+    try:
+        job.status = "running"
+        ws = _ws(user)
+        scope = [d.strip().replace("https://", "").replace("http://", "").strip("/")
+                 for d in req.scope if d.strip()]
+        def _codes(s: str) -> set:
+            c = {int(x) for x in (s or "").replace(" ", "").split(",") if x.isdigit()}
+            c.discard(0)   # 0 means "ignore this filter"
+            return c
+        allowed = _codes(req.statuses)         # accept if in this set (empty = any)
+        rejected = _codes(req.reject_statuses)  # reject if in this set (empty = none)
+        fh = req.from_host.strip().replace("https://", "").replace("http://", "").strip("/")
+        eps = ws.endpoints()
+        if fh:
+            targets = [e for e in eps if e.host == fh]
+        elif req.only_unknown:
+            targets = [e for e in eps if e.host == analyzer.UNKNOWN_HOST]
+        else:
+            targets = list(eps)
+        if req.skip_static:
+            targets = [e for e in targets if not e.is_static]
+        # dedup by (method, host, path): probe each distinct path ONCE, then the
+        # match applies to every endpoint sharing that path (cuts 13k -> hundreds)
+        probe = {}
+        for e in targets:
+            probe.setdefault((e.method, e.host, e.path), e)
+        probe = list(probe.values())
+        src = fh or (analyzer.UNKNOWN_HOST if req.only_unknown else "all")
+        job.note("validate", f"source '{src}': {len(probe)} unique paths "
+                 f"(of {len(targets)}) x {len(scope)} domains "
+                 f"(accept {sorted(allowed) or 'any'}"
+                 f"{f', reject {sorted(rejected)}' if rejected else ''}"
+                 f"{f', size {req.min_size}-{req.max_size}' if (req.min_size or req.max_size) else ''})")
+        limiter = katana.RateLimiter(ws.max_rps)
+        matches: dict = {}
+        checked = found = 0
+
+        def ok(status: int, size: int) -> bool:
+            if allowed and status not in allowed:
+                return False
+            if rejected and status in rejected:
+                return False
+            if req.min_size is not None and size < req.min_size:
+                return False
+            if req.max_size is not None and size > req.max_size:
+                return False
+            return True
+
+        for ep in probe:
+            if job.cancelled:
+                break
+            for dom in scope:
+                if job.cancelled:
+                    break
+                url = f"{req.scheme}://{dom}{ep.path}"
+                await limiter.wait()
+                try:
+                    r = await _send_dispatch(ep.method or "GET", url, {}, None,
+                                             req.cookies or None, use_session=True,
+                                             owner=user, timeout_ms=15000)
+                except Exception:
+                    r = {}
+                checked += 1
+                status = int(r.get("status") or 0)
+                size = int(r.get("length") or len(r.get("body") or ""))
+                if status and ok(status, size):
+                    matches[(ep.method, ep.host, ep.path)] = dom
+                    found += 1
+                    job.note("hit", f"{ep.method} {ep.path} -> {dom} [{status}, {size}b]")
+                    break
+                if checked % 25 == 0:
+                    job.note("validate", f"checked {checked}, matched {found}")
+
+        moved = _apply_hosts(ws, matches) if matches else 0
+        job.js_count = len(probe)
+        job.note("done", f"probed {len(probe)} paths, matched {found}, "
+                 f"rebased {moved} endpoints" + (" (stopped)" if job.cancelled else ""))
+        job.status = "done"
+    except Exception as e:  # noqa: BLE001
+        job.status = "error"
+        job.error = repr(e)
+        job.note("error", job.error)
+    finally:
+        job.finished = time.time()
+
+
+@app.post("/api/validate")
+async def start_validate(req: ValidateReq, user: str = Depends(current_user)):
+    scope = [d.strip() for d in req.scope if d.strip()]
+    if not scope:
+        raise HTTPException(400, "scope (domains) required")
+    req.scope = scope
+    job = Job(id=uuid.uuid4().hex, path=f"validate {len(scope)} domains",
+              owner=user, source="validator")
+    JOBS[job.id] = job
+    asyncio.create_task(_run_validator_job(job, req, user))
     return {"job": job.id}
 
 
